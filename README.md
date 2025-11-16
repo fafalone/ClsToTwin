@@ -1,4 +1,4 @@
-# ClsToTwin v1.0.2
+# ClsToTwin v1.0.3
 Convert CLS to TWIN
 
 <img width="314" height="559" alt="image" src="https://github.com/user-attachments/assets/4f51dfa8-1b0c-42f5-918d-377c12743ca8" />
