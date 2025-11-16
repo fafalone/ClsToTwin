@@ -1,0 +1,336 @@
+[Description("")]
+[FormDesignerId("22E7D32C-C52F-40B6-A288-B3100FB59C6A")]
+[PredeclaredId]
+[]
+Class Form1
+
+    Private mSrcPath As String
+    Private lpFiles() As String
+    Private nFiles As Long
+    
+    Public Sub PostLog(sMsg As String)
+    Text3.Text = Text3.Text & sMsg & vbCrLf
+    SendMessage Text3.hWnd, EM_SCROLL, SB_BOTTOM, ByVal 0&
+    End Sub
+    
+    Private Sub Form_Load() Handles Form.Load
+        SHAutoComplete(Text1.hWnd, SHACF_FILESYS_ONLY)
+        SHAutoComplete(Text2.hWnd, SHACF_FILESYS_ONLY)
+    End Sub
+    
+    Private Function PickFolder(bSave As Boolean) As String
+        Dim pFOD As FileOpenDialog
+        Dim pFolder As IShellItem
+    
+        Set pFOD = New FileOpenDialog
+        With pFOD
+            .SetTitle "Pick folder..."
+            .SetOptions FOS_PICKFOLDERS Or FOS_FORCEFILESYSTEM Or FOS_PATHMUSTEXIST
+            If bSave Then
+                .SetClientGuid(UUID_Save)
+            End If
+            On Error Resume Next
+            .Show Me.hWnd
+            .GetResult pFolder
+            On Error GoTo 0
+            If (pFolder Is Nothing) = False Then
+                Dim lpPath As LongPtr, sPath As String
+                pFolder.GetDisplayName SIGDN_FILESYSPATH, lpPath
+                Return LPWSTRtoStr(lpPath)
+            End If
+        End With
+    End Function
+    Public Function UUID_Save() As UUID
+    '{24B1B0B7-08E9-400A-B815-DA70B0CAF1A8}
+    Static iid As UUID
+     If (iid.Data1 = 0) Then Call DEFINE_UUID(iid, &H24B1B0B7, CInt(&H08E9), CInt(&H400A), &HB8, &H15, &HDA, &H70, &HB0, &HCA, &HF1, &HA8)
+     UUID_Save = iid
+    End Function
+    
+    Private Sub BuildFileList(szPattern As String, szDir As String)
+        Dim hFind As LongPtr
+        Dim tWFD As WIN32_FIND_DATA
+        
+        hFind = FindFirstFile(szDir & "*", tWFD)
+        If hFind <> INVALID_HANDLE_VALUE Then
+            Do
+                Dim szName As String = WCHARtoSTR(tWFD.cFileName)
+                If (tWFD.dwFileAttributes And FILE_ATTRIBUTE_DIRECTORY) = FILE_ATTRIBUTE_DIRECTORY Then
+                    If (szName <> ".") And (szName <> "..") Then
+                        If Check2.Value = vbChecked Then
+                            BuildFileList szPattern, szDir & szName & "\"
+                        End If
+                    End If
+                Else
+                    If PathMatchSpec(szName, szPattern) Then
+                        ReDim Preserve lpFiles(nFiles)
+                        lpFiles(nFiles) = szDir & szName
+                        nFiles += 1
+                    End If
+                End If
+                ZeroMemory tWFD, LenB(Of WIN32_FIND_DATA)
+            Loop While FindNextFile(hFind, tWFD)
+            FindClose hFind
+        End If
+    End Sub
+    Private Function WCHARtoSTR(aCh() As Integer) As String
+    Dim i As Long
+    Dim sz As String
+    For i = LBound(aCh) To UBound(aCh)
+        If aCh(i) <> 0 Then
+            sz = sz & ChrW$(CLng(aCh(i)))
+        End If
+    Next
+    WCHARtoSTR = sz
+    End Function
+    Private Sub AddBackslash(sz As String)
+        If Len(sz) = 0 Then
+            sz = "\"
+            Exit Sub
+        End If
+        If Right$(sz, 1) <> "\" Then
+            sz = sz & "\"
+        End If
+    End Sub
+    
+    Private Sub Command1_Click() Handles Command1.Click
+        Text1.Text = PickFolder(False)
+        
+        If Text2.Text = "" Then Text2.Text = Text1.Text
+    End Sub
+    
+    Private Sub Command2_Click() Handles Command2.Click
+        Text2.Text = PickFolder(True)
+    End Sub
+    
+    Private Function ProcessFiles() As Long
+        On Error GoTo e0
+        Dim i As Long, j As Long, k As Long
+        Dim s1 As String, s2 As String, s3 As String
+        Dim gC As UUID, gI As UUID, gE As UUID
+        Dim sgC As String, sgI As String, sgE As String
+        Dim hFile As LongPtr
+        Dim lRet As Long
+        
+        Dim btSrc() As Byte
+        
+        Dim sName As String, sVBName As String
+        
+        Dim sCls As String, sTwin As String
+        
+        Dim cb As Long, cbHigh As Long, cbRet As Long, cbDst As Long
+        
+        For i = 0 To nFiles - 1
+            j = 0: k = 0
+            sName = Right$(lpFiles(i), Len(lpFiles(i)) - InStrRev(lpFiles(i), "\"))
+             
+            hFile = CreateFile(lpFiles(i), GENERIC_WRITE Or FILE_WRITE_DATA Or FILE_READ_DATA Or GENERIC_READ, FILE_SHARE_READ, vbNullPtr, OPEN_ALWAYS, FILE_FLAG_WRITE_THROUGH, 0&)
+            If hFile = INVALID_HANDLE_VALUE Then
+                PostLog "Failed to open file " & sName & ", error=" & GetSystemErrorString(Err.LastDllError)
+                Continue For
+            End If
+            
+            cb = GetFileSize(hFile, cbHigh)
+            If cbHigh Then
+                'VB source files shouldn't be >2GB so not implementing the logic to handle this.
+                PostLog "File too large, skipping " & lpFiles(i)
+                CloseHandle hFile
+                Continue For
+            End If
+            If cb = 0 Then
+                PostLog "Zero length file, skipping " & sName
+                CloseHandle hFile
+                Continue For
+            End If
+
+            
+            ReDim btSrc(cb - 1)
+            
+            
+            If ReadFile(hFile, btSrc(0), cb, cbRet, vbNullPtr) = 0 Then
+                PostLog "An error occured reading " & sName & ", Req=" & cb & ", read=" & cbRet & ", error=" & GetSystemErrorString(Err.LastDllError)
+                CloseHandle hFile
+                Continue For
+            End If
+            
+            CloseHandle hFile
+            
+            sCls = StrConv(btSrc, vbUnicode)
+    
+            'Look for VB_Name
+            k = InStr(sCls, "Attribute VB_Name = " & Chr$(34))
+            If k Then
+                sVBName = Mid$(sCls, k + 21)
+                sVBName = Left$(sVBName, InStr(sVBName, vbCrLf) - 2)
+                PostLog "Parsed " & sName & " VBName=" & sVBName
+            End If
+            If sVBName = "" Then
+                sVBName = Left$(sName, Len(sName) - 4)
+            End If
+            
+            sTwin = Mid$(sCls, InStr(sCls, "END" & vbCrLf) + 5)
+            
+            If Check3.Value = vbChecked Then
+                CoCreateGuid gC
+                sgC = String$(38, " ")
+                StringFromGUID2(gC, StrPtr(sgC), 39)
+                sgC = Mid$(sgC, 2)
+                sgC = Left$(sgC, Len(sgC) - 1)
+                s1 = "[ClassId(" & Chr$(34) & sgC & Chr$(34) & ")]" & vbCrLf
+            End If
+            If Check4.Value = vbChecked Then
+                CoCreateGuid gI
+                sgI = String$(38, " ")
+                StringFromGUID2(gI, StrPtr(sgI), 39)
+                sgI = Mid$(sgI, 2)
+                sgI = Left$(sgI, Len(sgI) - 1)
+                s1 = s1 & "[InterfaceId(" & Chr$(34) & sgI & Chr$(34) & ")]" & vbCrLf
+            End If
+            If Check5.Value = vbChecked Then
+                CoCreateGuid gE
+                sgE = String$(38, " ")
+                StringFromGUID2(gE, StrPtr(sgE), 39)
+                sgE = Mid$(sgE, 2)
+                sgE = Left$(sgE, Len(sgE) - 1)
+                s1 = s1 & "[EventInterfaceId(" & Chr$(34) & sgE & Chr$(34) & ")]" & vbCrLf
+            End If
+            
+            s1 = s1 & "Class " & sVBName & vbCrLf
+            
+            sTwin = s1 & sTwin & vbCrLf & vbCrLf & "End Class"
+            
+            SaveTwin sTwin, sName, lpFiles(i)
+                     
+    NextFile:
+        Next
+        Exit Function
+        e0:
+        PostLog "An unexpected error occured while processing file, " & Err.Number & ", " & Err.Description
+    End Function
+            
+    Private Function SaveTwin(sOut As String, ByVal sName As String, ByVal sFull As String) As Long
+        On Error GoTo e0
+        Dim sDst As String, sNameOut As String
+        Dim s1 As String
+        sName = Left$(sName, Len(sName) - 3) & "twin"
+        
+        If Check2.Value = vbChecked Then
+            sDst = Text2.Text
+            AddBackslash(sDst)
+            sDst = sDst & sName
+        Else
+            sDst = Left$(sFull, InStrRev(sFull, "\"))
+            s1 = Text1.Text
+            AddBackslash(s1)
+            sDst = Replace$(sDst, s1, "", , , vbTextCompare)
+            sDst = AddBackslashF(Text2.Text) & sDst
+            MakeSureDirectoryPathExists(RemoveBackslash(sDst))
+            sDst = AddBackslashF(sDst) & sName
+        End If
+        
+        Dim hFile As LongPtr
+        Dim nBytes As Long
+        Dim nBytesWritten As Long
+        Dim btDst() As Byte
+        btDst = StrConv(sOut, vbFromUnicode)
+    
+        hFile = CreateFile(sDst, GENERIC_WRITE, _
+                            FILE_SHARE_READ Or FILE_SHARE_WRITE, vbNullPtr, _
+                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0)
+        nBytes = UBound(btDst) + 1
+        If hFile <> INVALID_HANDLE_VALUE Then
+            WriteFile hFile, btDst(0), nBytes, nBytesWritten, vbNullPtr
+            SaveTwin = (nBytesWritten - nBytes)
+            CloseHandle hFile
+            PostLog "Converted " & sFull & " to " & sDst
+        Else
+            PostLog "Failed to create file " & sDst & ", error=" & GetSystemErrorString(Err.LastDllError)
+        End If
+        Exit Function
+        e0:
+        PostLog "An unexpected error occured while saving file, " & Err.Number & ", " & Err.Description
+                
+    End Function
+            
+    Private Function RemoveBackslash(s As String) As String
+        If s = "" Then Exit Function
+        If Right$(s, 1) = "\" Then
+            Return Left$(s, Len(s) - 1)
+        Else
+            Return s
+        End If
+    End Function
+    Private Function AddBackslashF(s As String) As String
+        If s = "" Then Exit Function
+        If Right$(s, 1) <> "\" Then
+            Return s & "\"
+        Else
+            Return s
+        End If
+    End Function
+    
+    Private Sub Command3_Click() Handles Command3.Click
+        If PathFileExists(Text1.Text) = 0 Then
+            PostLog "Error: Invalid path specified."
+            Exit Sub
+        End If
+        If Text2.Text = "" Then
+            Text2.Text = Text1.Text
+        End If
+        
+        Command1.Enabled = False
+        Command2.Enabled = False
+        Command3.Enabled = False
+        Text1.Enabled = False
+        Text2.Enabled = False
+               
+        nFiles = 0
+        ReDim lpFiles(0)
+        mSrcPath = Text1.Text
+        AddBackslash(mSrcPath)
+        
+        BuildFileList "*.cls", mSrcPath
+        
+        If nFiles = 0 Then
+            PostLog "No matching files found in the specified folder."
+            Command1.Enabled = True
+            Command2.Enabled = True
+            Command3.Enabled = True
+            Text1.Enabled = True
+            Text2.Enabled = True
+            
+            Exit Sub
+        End If
+        
+        If Check6.Value = vbChecked Then
+            Dim sList As String = Join(lpFiles, ", ")
+            Debug.Print "sList=" & sList
+            Dim r2 As VbMsgBoxResult
+            r2 = MsgBox("The following " & nFiles & IIf(nFiles = 1, " file", " files") & " will be processed:" & vbCrLf & vbCrLf & sList & vbCrLf & vbCrLf & "Continue?", vbOKCancel Or vbQuestion, App.Title)
+            If r2 = vbCancel Then
+                Command1.Enabled = True
+                Command2.Enabled = True
+                Command3.Enabled = True
+                Text1.Enabled = True
+                Text2.Enabled = True
+                Exit Sub
+            End If
+        End If
+        
+        Dim hr As Long = ProcessFiles()
+        If hr = S_OK Then
+            PostLog "Successfully processed " & nFiles & IIf(nFiles = 1, " file.", " files.")
+        Else
+            PostLog "Did not process all files successfully, code " & hr
+        End If
+        
+        Command1.Enabled = True
+        Command2.Enabled = True
+        Command3.Enabled = True
+        Text1.Enabled = True
+        Text2.Enabled = True
+        
+    End Sub
+     
+            
+End Class
