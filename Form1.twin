@@ -4,6 +4,7 @@
 Class Form1
     
     'Update v1.0.2 - Switch to correct UTF8 for output
+    'Update v1.0.3 - Folder creation issue
 
     Private mSrcPath As String
     Private lpFiles() As String
@@ -225,7 +226,7 @@ Class Form1
             AddBackslash(s1)
             sDst = Replace$(sDst, s1, "", , , vbTextCompare)
             sDst = AddBackslashF(Text2.Text) & sDst
-            MakeSureDirectoryPathExists(RemoveBackslash(sDst))
+            MakeSureDirectoryPathExists(AddBackslashF(sDst))
             sDst = AddBackslashF(sDst) & sName
         End If
         
