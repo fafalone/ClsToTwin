@@ -1,8 +1,9 @@
 [Description("")]
 [FormDesignerId("22E7D32C-C52F-40B6-A288-B3100FB59C6A")]
 [PredeclaredId]
-[]
 Class Form1
+    
+    'Update v1.0.2 - Switch to correct UTF8 for output
 
     Private mSrcPath As String
     Private lpFiles() As String
@@ -232,7 +233,7 @@ Class Form1
         Dim nBytes As Long
         Dim nBytesWritten As Long
         Dim btDst() As Byte
-        btDst = StrConv(sOut, vbFromUnicode)
+        btDst = StrConv(sOut, vbUTF8)
     
         hFile = CreateFile(sDst, GENERIC_WRITE, _
                             FILE_SHARE_READ Or FILE_SHARE_WRITE, vbNullPtr, _
