@@ -5,7 +5,8 @@ Class Form1
     
     'Update v1.0.2 - Switch to correct UTF8 for output
     'Update v1.0.3 - Folder creation issue
-
+    'Update v1.0.3.1 - Update .twinproj for new syntax requiring ByVal for vbNullPtr
+    
     Private mSrcPath As String
     Private lpFiles() As String
     Private nFiles As Long
@@ -126,7 +127,7 @@ Class Form1
             j = 0: k = 0
             sName = Right$(lpFiles(i), Len(lpFiles(i)) - InStrRev(lpFiles(i), "\"))
              
-            hFile = CreateFile(lpFiles(i), GENERIC_WRITE Or FILE_WRITE_DATA Or FILE_READ_DATA Or GENERIC_READ, FILE_SHARE_READ, vbNullPtr, OPEN_ALWAYS, FILE_FLAG_WRITE_THROUGH, 0&)
+            hFile = CreateFile(lpFiles(i), GENERIC_WRITE Or FILE_WRITE_DATA Or FILE_READ_DATA Or GENERIC_READ, FILE_SHARE_READ, ByVal vbNullPtr, OPEN_ALWAYS, FILE_FLAG_WRITE_THROUGH, 0&)
             If hFile = INVALID_HANDLE_VALUE Then
                 PostLog "Failed to open file " & sName & ", error=" & GetSystemErrorString(Err.LastDllError)
                 Continue For
@@ -149,7 +150,7 @@ Class Form1
             ReDim btSrc(cb - 1)
             
             
-            If ReadFile(hFile, btSrc(0), cb, cbRet, vbNullPtr) = 0 Then
+            If ReadFile(hFile, btSrc(0), cb, cbRet, ByVal vbNullPtr) = 0 Then
                 PostLog "An error occured reading " & sName & ", Req=" & cb & ", read=" & cbRet & ", error=" & GetSystemErrorString(Err.LastDllError)
                 CloseHandle hFile
                 Continue For
@@ -237,11 +238,11 @@ Class Form1
         btDst = StrConv(sOut, vbUTF8)
     
         hFile = CreateFile(sDst, GENERIC_WRITE, _
-                            FILE_SHARE_READ Or FILE_SHARE_WRITE, vbNullPtr, _
+                            FILE_SHARE_READ Or FILE_SHARE_WRITE, ByVal vbNullPtr, _
                             CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0)
         nBytes = UBound(btDst) + 1
         If hFile <> INVALID_HANDLE_VALUE Then
-            WriteFile hFile, btDst(0), nBytes, nBytesWritten, vbNullPtr
+            WriteFile hFile, btDst(0), nBytes, nBytesWritten, ByVal vbNullPtr
             SaveTwin = (nBytesWritten - nBytes)
             CloseHandle hFile
             PostLog "Converted " & sFull & " to " & sDst
